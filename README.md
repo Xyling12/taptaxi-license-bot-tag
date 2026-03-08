@@ -28,6 +28,30 @@ python bot.py
 docker-compose up -d
 ```
 
+### Dokploy (через готовый image)
+
+После push в `main` GitHub Actions публикует образ:
+`ghcr.io/xyling12/taptaxi-license-bot-tag:latest`
+
+В Dokploy (Raw Compose) можно использовать:
+
+```yaml
+services:
+  license-bot:
+    image: ghcr.io/xyling12/taptaxi-license-bot-tag:latest
+    restart: unless-stopped
+    volumes:
+      - bot_data:/app/data
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      AUTO_APPROVE: "true"
+      SECRET_KEY: ${SECRET_KEY}
+      DB_PATH: data/licenses.db
+
+volumes:
+  bot_data:
+```
+
 ## Автотесты
 
 ```bash
