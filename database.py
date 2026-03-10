@@ -37,29 +37,19 @@ class Database:
         """Add or update a license request. Returns True if newly created."""
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute(
-                "SELECT status FROM licenses WHERE device_id = ?", (device_id,)
+            # Atomic UPSERT — no race condition on concurrent messages
+            await db.execute(
+                """INSERT INTO licenses
+                   (device_id, telegram_id, telegram_username, status, created_at)
+                   VALUES (?, ?, ?, 'pending', ?)
+                   ON CONFLICT(device_id) DO UPDATE SET
+                       telegram_id=excluded.telegram_id,
+                       telegram_username=excluded.telegram_username""",
+                (device_id, telegram_id, telegram_username, now),
             )
-            row = await cur.fetchone()
-            if row:
-                # Already exists — update telegram info but keep status
-                await db.execute(
-                    """UPDATE licenses
-                       SET telegram_id=?, telegram_username=?
-                       WHERE device_id=?""",
-                    (telegram_id, telegram_username, device_id),
-                )
-                await db.commit()
-                return False
-            else:
-                await db.execute(
-                    """INSERT INTO licenses
-                       (device_id, telegram_id, telegram_username, status, created_at)
-                       VALUES (?, ?, ?, 'pending', ?)""",
-                    (device_id, telegram_id, telegram_username, now),
-                )
-                await db.commit()
-                return True
+            is_new = db.total_changes == 1
+            await db.commit()
+            return is_new
 
     async def approve(self, device_id: str, license_code: str) -> Optional[dict]:
         """Approve a license request. Returns the updated record or None."""
