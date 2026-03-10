@@ -118,7 +118,7 @@ async def handle_device_id(msg: Message):
 
     device_id = msg.text.strip()
 
-    if len(device_id) < 4 or len(device_id) > 128:
+    if len(device_id) < 4 or len(device_id) > 55:
         await msg.answer("❌ Неверный Device ID. Проверь и попробуй ещё раз.")
         return
 
