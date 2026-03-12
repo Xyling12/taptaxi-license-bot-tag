@@ -65,21 +65,29 @@ def _user_label(msg: Message) -> str:
     return f"id:{msg.from_user.id}"
 
 
-def _license_text(device_id: str, code: str) -> str:
-    return (
+def _license_text(device_id: str, code: str, code2: str = "") -> str:
+    text = (
         "🎉 <b>Лицензия активирована!</b>\n\n"
-        "Твой персональный код:\n"
+        "📱 <b>TapTaxi</b> код:\n"
         f"<code>{code}</code>\n\n"
+    )
+    if code2:
+        text += (
+            "🚖 <b>TakerTap</b> код:\n"
+            f"<code>{code2}</code>\n\n"
+        )
+    text += (
         f"📱 Device ID: <code>{device_id}</code>\n\n"
-        "Введи этот код при запуске приложения.\n"
+        "Введи нужный код при запуске приложения.\n"
         "При переустановке на том же телефоне — код не меняется ✅"
     )
+    return text
 
 
-async def _send_license_to_user(telegram_id: int, device_id: str, code: str) -> None:
+async def _send_license_to_user(telegram_id: int, device_id: str, code: str, code2: str = "") -> None:
     await _bot.send_message(
         telegram_id,
-        _license_text(device_id, code),
+        _license_text(device_id, code, code2),
         parse_mode=ParseMode.HTML,
     )
 
@@ -139,25 +147,29 @@ async def handle_device_id(msg: Message):
 
     if _config.auto_approve:
         code = generate_license(device_id, _config.secret_key)
+        code2 = generate_license(device_id, _config.secret_key_2) if _config.secret_key_2 else ""
         await _db.approve(device_id, code)
-        await msg.answer(
-            f"✅ Твой лицензионный код:\n\n"
-            f"<code>{code}</code>\n\n"
-            f"📱 Device ID: <code>{device_id}</code>",
-            parse_mode=ParseMode.HTML,
+        text = (
+            f"✅ Твои лицензионные коды:\n\n"
+            f"📱 <b>TapTaxi:</b> <code>{code}</code>\n"
         )
+        if code2:
+            text += f"🚖 <b>TakerTap:</b> <code>{code2}</code>\n"
+        text += f"\n📱 Device ID: <code>{device_id}</code>"
+        await msg.answer(text, parse_mode=ParseMode.HTML)
 
         if _config.admin_ids:
+            admin_text = (
+                f"⚙️ <b>Автовыдача лицензии</b>\n\n"
+                f"👤 {_user_label(msg)} (id: <code>{msg.from_user.id}</code>)\n"
+                f"📱 Device ID: <code>{device_id}</code>\n"
+                f"🔑 TapTaxi: <code>{code}</code>"
+            )
+            if code2:
+                admin_text += f"\n🔑 TakerTap: <code>{code2}</code>"
             for admin_id in _config.admin_ids:
                 try:
-                    await _bot.send_message(
-                        admin_id,
-                        f"⚙️ <b>Автовыдача лицензии</b>\n\n"
-                        f"👤 {_user_label(msg)} (id: <code>{msg.from_user.id}</code>)\n"
-                        f"📱 Device ID: <code>{device_id}</code>\n"
-                        f"🔑 Код: <code>{code}</code>",
-                        parse_mode=ParseMode.HTML,
-                    )
+                    await _bot.send_message(admin_id, admin_text, parse_mode=ParseMode.HTML)
                 except Exception as e:
                     logger.warning(f"Failed to notify admin {admin_id}: {e}")
         return
@@ -198,18 +210,23 @@ async def cb_approve(cb: CallbackQuery):
 
     device_id = cb.data.split(":", 1)[1]
     code = generate_license(device_id, _config.secret_key)
+    code2 = generate_license(device_id, _config.secret_key_2) if _config.secret_key_2 else ""
     record = await _db.approve(device_id, code)
+
+    codes_text = f"TapTaxi: <code>{code}</code>"
+    if code2:
+        codes_text += f" | TakerTap: <code>{code2}</code>"
 
     await cb.answer("✅ Лицензия выдана!")
     await cb.message.edit_text(
-        cb.message.text + f"\n\n✅ <b>Одобрено</b> — код: <code>{code}</code>",
+        cb.message.text + f"\n\n✅ <b>Одобрено</b> — {codes_text}",
         parse_mode=ParseMode.HTML,
         reply_markup=None,
     )
 
     if record:
         try:
-            await _send_license_to_user(record["telegram_id"], device_id, code)
+            await _send_license_to_user(record["telegram_id"], device_id, code, code2)
         except Exception as e:
             logger.warning(f"Failed to send license to driver: {e}")
             await cb.message.answer(f"⚠️ Не удалось отправить код водителю (telegram_id={record['telegram_id']})")
@@ -258,21 +275,24 @@ async def cmd_approve(msg: Message):
 
     device_id = parts[1].strip()
     code = generate_license(device_id, _config.secret_key)
+    code2 = generate_license(device_id, _config.secret_key_2) if _config.secret_key_2 else ""
     record = await _db.approve(device_id, code)
 
     if not record:
         await msg.answer(f"❌ Device ID <code>{device_id}</code> не найден в базе.", parse_mode=ParseMode.HTML)
         return
 
-    await msg.answer(
+    text = (
         f"✅ Лицензия выдана!\n"
         f"Device: <code>{device_id}</code>\n"
-        f"Код: <code>{code}</code>",
-        parse_mode=ParseMode.HTML,
+        f"TapTaxi: <code>{code}</code>"
     )
+    if code2:
+        text += f"\nTakerTap: <code>{code2}</code>"
+    await msg.answer(text, parse_mode=ParseMode.HTML)
 
     try:
-        await _send_license_to_user(record["telegram_id"], device_id, code)
+        await _send_license_to_user(record["telegram_id"], device_id, code, code2)
     except Exception as e:
         await msg.answer(f"⚠️ Не смог отправить код водителю: {e}")
 
@@ -334,10 +354,11 @@ async def cmd_gencode(msg: Message):
 
     device_id = parts[1].strip()
     code = generate_license(device_id, _config.secret_key)
-    await msg.answer(
-        f"🔑 Код для <code>{device_id}</code>:\n<code>{code}</code>",
-        parse_mode=ParseMode.HTML,
-    )
+    code2 = generate_license(device_id, _config.secret_key_2) if _config.secret_key_2 else ""
+    text = f"🔑 Коды для <code>{device_id}</code>:\n\nTapTaxi: <code>{code}</code>"
+    if code2:
+        text += f"\nTakerTap: <code>{code2}</code>"
+    await msg.answer(text, parse_mode=ParseMode.HTML)
 
 
 # ── Startup ────────────────────────────────────────────────────────────────

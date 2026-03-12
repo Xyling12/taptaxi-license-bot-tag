@@ -14,6 +14,7 @@ class Config:
     bot_token: str = ""
     admin_ids: List[int] = field(default_factory=list)
     secret_key: str = ""
+    secret_key_2: str = ""  # TakerTap secret (optional)
     db_path: str = "data/licenses.db"
     auto_approve: bool = False
 
@@ -32,6 +33,7 @@ class Config:
             bot_token=os.getenv("BOT_TOKEN", ""),
             admin_ids=admin_ids,
             secret_key=os.getenv("SECRET_KEY", ""),
+            secret_key_2=os.getenv("SECRET_KEY_2", ""),
             db_path=os.getenv("DB_PATH", "data/licenses.db"),
             auto_approve=auto_approve,
         )
