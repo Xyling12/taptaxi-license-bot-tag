@@ -136,13 +136,16 @@ async def handle_device_id(msg: Message):
     record = await _db.get(device_id)
 
     if record and record["status"] == "approved":
-        # Already approved — just resend the code
-        await msg.answer(
-            f"✅ Твой лицензионный код:\n\n"
-            f"<code>{record['license_code']}</code>\n\n"
-            f"📱 Device ID: <code>{device_id}</code>",
-            parse_mode=ParseMode.HTML,
+        # Already approved — resend code + generate TakerTap code
+        code2 = generate_license(device_id, _config.secret_key_2) if _config.secret_key_2 else ""
+        text = (
+            f"✅ Твои лицензионные коды:\n\n"
+            f"📱 <b>TapTaxi:</b> <code>{record['license_code']}</code>\n"
         )
+        if code2:
+            text += f"🚖 <b>TakerTap:</b> <code>{code2}</code>\n"
+        text += f"\n📱 Device ID: <code>{device_id}</code>"
+        await msg.answer(text, parse_mode=ParseMode.HTML)
         return
 
     if _config.auto_approve:
